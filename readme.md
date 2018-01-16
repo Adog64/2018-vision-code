@@ -12,6 +12,5 @@ from the command line to get all the build tasks for this project. Or,
 if you are in an IDE such as eclipse or IntelliJ, add the `build.gradle`
 to the Gradle Projects view.
 
-The main build task to remember is `gradlew deploy`
-
-##  
+The main build task to remember is `gradlew deploy`. This deploys the code
+to the Pi and runs the camera vision automatically.
