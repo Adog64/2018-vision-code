@@ -1,0 +1,158 @@
+// Plugins block
+// Feel free to add more, but the main ones that should stay are:
+// - java
+// - application
+// - org.hidetake.ssh
+// - com.github.johnrengelman.shadow
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'eclipse'
+    id 'idea'
+    id 'org.hidetake.ssh' version '2.7.2'
+    id 'com.github.johnrengelman.shadow' version '1.2.4'
+}
+
+// Set the buildType to whichever OS you're building for.
+// Windows: "windows"
+// Raspbian (Pi): "arm-raspbian"
+// armhf devices (Jetson/Beaglebone Black): "armhf"
+
+ext.buildType = "arm-raspbian"
+
+// Change the line below if you change the name of your main Java class.
+// Reminder: full declaration of name, i.e.: include packages
+mainClassName = 'org.usfirst.frc.team1089.main.Main'
+
+// Change the line below to change the name of the output jar
+def projectName = 'CameraVision'
+
+remotes {
+    pi {
+        host = '10.10.89.20'
+        port = 5802
+        user = 'pi'
+        password = 'raspberry'
+    }
+}
+
+// Shouldn't need to change anything below this point
+apply from: 'dependencies.gradle'
+
+repositories {
+    mavenCentral()
+    maven {
+        url "http://first.wpi.edu/FRC/roborio/maven/release"
+    }
+}
+
+dependencies {
+    compile ntcoreDep()
+    compile cscoreDep()
+    compile 'org.opencv:opencv-java:3.1.0'
+}
+
+jar {
+  baseName = projectName
+}
+
+shadowJar {
+  baseName = projectName
+}
+
+distributions {
+    main {
+        baseName = projectName
+        contents {
+            from (openCvUnzipLocation) {
+                exclude 'META-INF'
+                exclude '**/MANIFEST.MF'
+                into 'bin/'
+            }
+        }
+    }
+}
+
+def outputDirectory = file("${rootDir}/output")
+
+task deploy {
+    dependsOn build
+    group = 'build'
+    doLast {
+        ssh.run {
+            session(remotes.pi) {
+                put from: outputDirectory, into: '/home/pi'
+                executeScript file('/home/pi/output/runCameraVision')
+            }
+        }
+    }
+}
+
+task writeExecuteScript() {
+  dependsOn jar
+  doLast {
+    if (buildType == "windows") {
+      def runFile = new File("${buildDir}/run${projectName}.bat")
+      runFile.write "java -Djava.library.path=. -jar ${projectName}-all.jar"
+    } else {
+      def runFile = new File("${buildDir}/run${projectName}")
+      runFile.write "java -Djava.library.path=. -jar ${projectName}-all.jar"
+    }
+  }
+}
+
+task copyToOutput(type: Copy) {
+  dependsOn shadowJar
+  dependsOn unzipOpenCv
+  dependsOn writeExecuteScript
+  destinationDir = outputDirectory
+  from (file(shadowJar.archivePath)) {
+  }
+  from (openCvUnzipLocation) {
+    exclude 'META-INF'
+    exclude '**/MANIFEST.MF'
+  }
+  if (buildType == "windows") {
+    from (file("${buildDir}/run${projectName}.bat")) {
+    }
+  } else {
+    from (file("${buildDir}/run${projectName}")) {
+    }
+  }
+}
+
+task zipOutput(type: Zip) {
+  baseName = projectName
+  duplicatesStrategy = 'exclude'
+  dependsOn shadowJar
+  dependsOn unzipOpenCv
+  destinationDir = outputDirectory
+  from (file(shadowJar.archivePath)) {
+  }
+  from (openCvUnzipLocation) {
+    exclude 'META-INF'
+    exclude '**/MANIFEST.MF'
+  }
+  if (buildType == "windows") {
+    from (file("${buildDir}/run${projectName}.bat")) {
+    }
+  } else {
+    from (file("${buildDir}/run${projectName}")) {
+      fileMode 0777
+    }
+  }
+}
+
+distZip.dependsOn unzipOpenCv
+distTar.dependsOn unzipOpenCv
+
+applicationDefaultJvmArgs = ["-Djava.library.path=${openCvUnzipLocation}"]
+
+build.dependsOn copyToOutput
+build.dependsOn zipOutput
+run.dependsOn unzipOpenCv
+
+clean {
+    delete outputDirectory
+}
