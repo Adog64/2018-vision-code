@@ -10,8 +10,8 @@ plugins {
     id 'application'
     id 'eclipse'
     id 'idea'
-    id 'org.hidetake.ssh' version '2.7.2'
-    id 'com.github.johnrengelman.shadow' version '1.2.4'
+    id 'org.hidetake.ssh' version '2.9.0'
+    id 'com.github.johnrengelman.shadow' version '2.0.2'
 }
 
 // Set the buildType to whichever OS you're building for.
@@ -82,8 +82,9 @@ task deploy {
     doLast {
         ssh.run {
             session(remotes.pi) {
+                execute 'rm -rf /home/pi/output'
                 put from: outputDirectory, into: '/home/pi'
-                executeScript file('/home/pi/output/runCameraVision')
+                execute 'chmod 755 /home/pi/output/runCameraVision'
             }
         }
     }
